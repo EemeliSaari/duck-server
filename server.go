@@ -1,77 +1,92 @@
 package main
 
-
-import(
+import (
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/mux" // go get github.com/gorilla/mux
-	"github.com/rs/cors" // go get github.com/rs/cors
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
+
+	"github.com/gorilla/mux" // go get github.com/gorilla/mux
+	"github.com/rs/cors"     // go get github.com/rs/cors
 )
 
-						// Go's rutine to construct the json
-type Sighting struct{
-	ID string 			`json:"id, omitempty"`
-	Specie string		`json:"species, omitempty"`
-	Description string	`json:"description, omitempty"`
-	Date string			`json:"dateTime, omitempty"`
-	Count int			`json:"count, omitempty"`
+//Sighting struct that contains all the duck sightings
+type Sighting struct {
+	ID          string `json:"id, omitempty"`
+	Specie      string `json:"species, omitempty"`
+	Description string `json:"description, omitempty"`
+	Date        string `json:"dateTime, omitempty"`
+	Count       int    `json:"count, omitempty"`
 }
 
-
-type Specie struct{
-	Name string			`json:"name, omitempty"`
+//Specie struct that contains names of all the duck species
+type Specie struct {
+	Name string `json:"name, omitempty"`
 }
-
 
 var sightings []Sighting
 var species []Specie
 
-
-func loadData(){
+func loadData() {
 	// Check if the data exists, runs python script otherwise
-	files := []string{"species.json", "sightings.json"}
-	for _, element := range files{
-		if _, err := os.Stat(element); os.IsNotExist(err){
-			argList := []string{"http://github.com/vincit/summer-2018.git", "8080", "sightings", "species"}
-			cmd := exec.Command("load_data.py", argList...).Run()
-			if(cmd != nil){
-				fmt.Println("Successfully loaded the data.")
+	files := []string{"rsc/species.json", "rsc/sightings.json"}
+	for _, element := range files {
+		_, err := os.Stat(element)
+
+		if err != nil {
+
+			// Ask user if they want to fetch the original server data
+			fmt.Println("Do you want to run python script\nto load the data?\n(Y/N)")
+			var out string
+			fmt.Scanln(&out)
+
+			if out == "Y" {
+				argList := []string{"load_data.py", "http://github.com/vincit/summer-2018.git", "8080", "sightings", "species"}
+				cmd := exec.Command("python", argList...)
+				err := cmd.Start()
+				if err != nil {
+					fmt.Println("Failed to start the script")
+					return
+				}
+				err = cmd.Wait()
+				if err != nil {
+					fmt.Println("Failed to run the script")
+				}
+				os.RemoveAll("summer-2018") // remove the temporary folder
+				fmt.Println("Script completed")
+			} else {
+				fmt.Println("Server will start without data.")
+				break
 			}
-			break
 		}
 	}
-	raw, err := ioutil.ReadFile("sightings.json")
-	if err == nil{
+	raw, err := ioutil.ReadFile("rsc/sightings.json")
+	if err == nil {
 		json.Unmarshal(raw, &sightings)
 	}
-	raw, err = ioutil.ReadFile("species.json")
-	if err == nil{
+	raw, err = ioutil.ReadFile("rsc/species.json")
+	if err == nil {
 		json.Unmarshal(raw, &species)
 	}
 }
 
+func getSightings(res http.ResponseWriter, req *http.Request) {
 
-func getSightings(res http.ResponseWriter, req *http.Request){
-	
 	res.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(res).Encode(sightings)
 }
 
-
-func getSpecies(res http.ResponseWriter, req *http.Request){
+func getSpecies(res http.ResponseWriter, req *http.Request) {
 
 	res.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(res).Encode(species)
 }
 
-
-func postSightings(res http.ResponseWriter, req *http.Request){
+func postSightings(res http.ResponseWriter, req *http.Request) {
 
 	var sighting Sighting
 	_ = json.NewDecoder(req.Body).Decode(&sighting)
@@ -82,15 +97,14 @@ func postSightings(res http.ResponseWriter, req *http.Request){
 	json.NewEncoder(res).Encode(req.Body)
 }
 
-
-func main(){
+func main() {
 
 	loadData()
 
 	portNum := 8081
 	// Check for cmd args for the user port
-	if(len(os.Args) > 1){
-		if arg, err := strconv.Atoi(os.Args[1]); err == nil{
+	if len(os.Args) > 1 {
+		if arg, err := strconv.Atoi(os.Args[1]); err == nil {
 			portNum = arg
 		}
 	}
@@ -101,15 +115,15 @@ func main(){
 	router.HandleFunc("/sightings", getSightings).Methods("GET")
 	router.HandleFunc("/species", getSpecies).Methods("GET")
 	router.HandleFunc("/sightings", postSightings).Methods("POST")
-	
+
 	// toggle CORS options
 	c := cors.New(cors.Options{
 		AllowedMethods: []string{"GET", "POST"},
 		AllowedHeaders: []string{"Access-Control-Allow-Origin", "Origin, X-Requested-With, Content-Type, Accept", "*"},
 	})
 	handler := c.Handler(router)
-	
+
 	fmt.Println("Server listening port", portNum)
 
-	log.Fatal(http.ListenAndServe(port, handler)) // Prints error if failed
+	log.Fatal(http.ListenAndServe(port, handler)) // Start the actual server
 }
