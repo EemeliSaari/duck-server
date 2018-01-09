@@ -19,7 +19,7 @@ Tested with the Go version 1.8.3 windows/amd64
 
 Inside current %GOPATH%:
 ```
-$ go get github.com/EemeliSaari/duck-server
+$ go get -u github.com/EemeliSaari/duck-server
 $ cd src/github.com/EemeliSaari/duck-server
 $ go run server.go
 ```
