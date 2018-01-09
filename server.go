@@ -2,16 +2,15 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
-	"os/exec"
 	"strconv"
 
-	"github.com/gorilla/mux" // go get github.com/gorilla/mux
-	"github.com/rs/cors"     // go get github.com/rs/cors
+	"github.com/gorilla/mux" 
+	"github.com/rs/cors" 
 )
 
 //Sighting struct that contains all the duck sightings
@@ -31,62 +30,37 @@ type Specie struct {
 var sightings []Sighting
 var species []Specie
 
-func loadData() {
-	// Check if the data exists, runs python script otherwise
-	files := []string{"rsc/species.json", "rsc/sightings.json"}
-	for _, element := range files {
-		_, err := os.Stat(element)
+// LoadData loads the interface data to the arrays
+func LoadData() {
 
-		if err != nil {
-
-			// Ask user if they want to fetch the original server data
-			fmt.Println("Do you want to run python script\nto load the data?\n(Y/N)")
-			var out string
-			fmt.Scanln(&out)
-
-			if out == "Y" {
-				argList := []string{"load_data.py", "http://github.com/vincit/summer-2018.git", "8080", "sightings", "species"}
-				cmd := exec.Command("python", argList...)
-				err := cmd.Start()
-				if err != nil {
-					fmt.Println("Failed to start the script")
-					return
-				}
-				err = cmd.Wait()
-				if err != nil {
-					fmt.Println("Failed to run the script")
-				}
-				os.RemoveAll("summer-2018") // remove the temporary folder
-				fmt.Println("Script completed")
-			} else {
-				fmt.Println("Server will start without data.")
-				break
-			}
-		}
-	}
-	raw, err := ioutil.ReadFile("rsc/sightings.json")
-	if err == nil {
+	if raw, err := ioutil.ReadFile("rsc/sightings.json"); err == nil{
 		json.Unmarshal(raw, &sightings)
+	} else{
+		fmt.Println("Error reading file: %v", err)
 	}
-	raw, err = ioutil.ReadFile("rsc/species.json")
-	if err == nil {
+	if raw, err := ioutil.ReadFile("rsc/species.json"); err == nil{
 		json.Unmarshal(raw, &species)
+	} else{
+		fmt.Println("Error reading file: %v", err)
 	}
 }
 
-func getSightings(res http.ResponseWriter, req *http.Request) {
+// GetSightings returns list of all the sightings as json http response
+func GetSightings(res http.ResponseWriter, req *http.Request) {
 
 	res.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(res).Encode(sightings)
 }
 
-func getSpecies(res http.ResponseWriter, req *http.Request) {
+// GetSpecies returns list of all the species as json http response
+func GetSpecies(res http.ResponseWriter, req *http.Request) {
 
 	res.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(res).Encode(species)
 }
 
-func postSightings(res http.ResponseWriter, req *http.Request) {
+// PostSightings adds sighting to the sightings list
+func PostSightings(res http.ResponseWriter, req *http.Request) {
 
 	var sighting Sighting
 	_ = json.NewDecoder(req.Body).Decode(&sighting)
@@ -97,24 +71,13 @@ func postSightings(res http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(res).Encode(req.Body)
 }
 
-func main() {
-
-	loadData()
-
-	portNum := 8081
-	// Check for cmd args for the user port
-	if len(os.Args) > 1 {
-		if arg, err := strconv.Atoi(os.Args[1]); err == nil {
-			portNum = arg
-		}
-	}
-	port := fmt.Sprint(":", portNum)
+func MakeHandler() http.Handler{
 
 	// create HTTP request multiplexer
 	router := mux.NewRouter()
-	router.HandleFunc("/sightings", getSightings).Methods("GET")
-	router.HandleFunc("/species", getSpecies).Methods("GET")
-	router.HandleFunc("/sightings", postSightings).Methods("POST")
+	router.HandleFunc("/sightings", GetSightings).Methods("GET")
+	router.HandleFunc("/species", GetSpecies).Methods("GET")
+	router.HandleFunc("/sightings", PostSightings).Methods("POST")
 
 	// toggle CORS options
 	c := cors.New(cors.Options{
@@ -123,7 +86,19 @@ func main() {
 	})
 	handler := c.Handler(router)
 
-	fmt.Println("Server listening port", portNum)
+	return(handler)
+}
 
-	log.Fatal(http.ListenAndServe(port, handler)) // Start the actual server
+// cmd flag
+var Port = flag.String("PORT", "8081", "Listen address")
+
+func main() {
+
+	LoadData()
+	flag.Parse()
+	address := fmt.Sprint(":", *Port)
+
+	fmt.Println("Server listening port", *Port)
+
+	log.Fatal(http.ListenAndServe(address, MakeHandler())) // Start the actual server
 }
