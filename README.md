@@ -29,7 +29,7 @@ Start with different port (default 8081):
 ```
 $ go run server.go -PORT=<port>
 ```
-
+where `<port>` should be replaced with new number. 
 
 ## Tests
 
